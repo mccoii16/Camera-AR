@@ -148,10 +148,10 @@ export default function Viewer() {
     }
 
     return (
-      <div className="fixed inset-0 z-[100] bg-black touch-none" style={{ width: '100%', height: '100%' }}>
+      <div className="fixed inset-0 z-[100] bg-black touch-none" style={{ width: '100vw', height: '100dvh' }}>
         <iframe 
           src={arUrl.toString()} 
-          className="w-full h-full border-none block absolute inset-0"
+          className="w-full h-full border-none block"
           allow="camera; gyroscope; accelerometer; magnetometer; xr-spatial-tracking; microphone;"
         />
       </div>

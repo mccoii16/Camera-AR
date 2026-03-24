@@ -8,14 +8,14 @@
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
     <style>
       html, body { 
-        width: 100%; 
-        height: 100%; 
+        width: 100vw; 
+        height: 100dvh; 
         margin: 0; 
         padding: 0; 
         overflow: hidden; 
         background-color: #000; 
         font-family: sans-serif; 
-        position: absolute;
+        position: fixed;
         top: 0;
         left: 0;
       }
@@ -71,11 +71,6 @@
 
           ui.classList.add('hidden');
           setupScene(targetUrl);
-          
-          // Force resize events to fix iOS half-screen camera bug
-          setTimeout(() => window.dispatchEvent(new Event('resize')), 500);
-          setTimeout(() => window.dispatchEvent(new Event('resize')), 1500);
-          setTimeout(() => window.dispatchEvent(new Event('resize')), 3000);
         } catch (e) {
           console.error(e);
           statusText.innerText = "Error loading AR. The image might have CORS restrictions or is invalid.";
@@ -85,8 +80,7 @@
 
       function setupScene(targetUrl) {
         const sceneEl = document.createElement('a-scene');
-        // Added filterMinCF and filterBeta to significantly reduce shaking
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${targetUrl}; autoStart: true; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001;`);
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${targetUrl}; autoStart: true; uiLoading: no; uiError: no; uiScanning: no;`);
         sceneEl.setAttribute('color-space', 'sRGB');
         sceneEl.setAttribute('renderer', 'colorManagement: true, physicallyCorrectLights');
         sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
@@ -94,9 +88,7 @@
 
         const camera = document.createElement('a-camera');
         camera.setAttribute('position', '0 0 0');
-        // Completely disable gyro/device orientation tracking so it ONLY follows the image
-        camera.setAttribute('look-controls', 'enabled: false; magicWindowTrackingEnabled: false;');
-        camera.setAttribute('wasd-controls', 'enabled: false');
+        camera.setAttribute('look-controls', 'enabled: false');
         sceneEl.appendChild(camera);
 
         const target = document.createElement('a-entity');
