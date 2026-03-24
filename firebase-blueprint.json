@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "ARProject": {
+      "title": "ARProject",
+      "description": "An AR project containing a trigger image and an overlay video",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the AR project"
+        },
+        "triggerImageUrl": {
+          "type": "string",
+          "description": "The URL of the trigger image in Firebase Storage"
+        },
+        "overlayVideoUrl": {
+          "type": "string",
+          "description": "The URL of the overlay video in Firebase Storage"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Timestamp of creation"
+        },
+        "authorEmail": {
+          "type": "string",
+          "description": "Email of the creator (should be the admin)"
+        }
+      },
+      "required": ["title", "triggerImageUrl", "overlayVideoUrl", "createdAt", "authorEmail"]
+    }
+  },
+  "firestore": {
+    "ar_projects/{projectId}": {
+      "schema": { "$ref": "#/entities/ARProject" },
+      "description": "Collection of AR projects"
+    }
+  }
+}

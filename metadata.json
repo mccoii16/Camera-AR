@@ -1,0 +1,5 @@
+{
+  "name": "Paper Dreams Cebu",
+  "description": "AR Projects viewer and manager for Paper Dreams Cebu",
+  "requestFramePermissions": ["camera"]
+}
