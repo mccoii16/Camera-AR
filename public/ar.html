@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AR Experience</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+    <style>
+      body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+      #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 999; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); color: white; }
+      #loading-bar { width: 80%; max-width: 300px; height: 10px; background: #333; border-radius: 5px; margin-top: 20px; overflow: hidden; }
+      #loading-progress { width: 0%; height: 100%; background: #ffb6c1; transition: width 0.2s; }
+      .hidden { display: none !important; }
+      #close-btn { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); border: none; color: white; padding: 10px 15px; border-radius: 50%; font-size: 20px; cursor: pointer; z-index: 1000; }
+    </style>
+  </head>
+  <body>
+    <button id="close-btn">✕</button>
+    <div id="ui">
+      <h2 id="status-text">Preparing AR...</h2>
+      <div id="loading-bar"><div id="loading-progress"></div></div>
+    </div>
+
+    <script>
+      const urlParams = new URLSearchParams(window.location.search);
+      const imageUrl = urlParams.get('image');
+      const videoUrl = urlParams.get('video');
+      const ytId = urlParams.get('ytId');
+
+      const ui = document.getElementById('ui');
+      const statusText = document.getElementById('status-text');
+      const progress = document.getElementById('loading-progress');
+      const closeBtn = document.getElementById('close-btn');
+
+      closeBtn.addEventListener('click', () => {
+        window.parent.postMessage('close-ar', '*');
+      });
+
+      async function initAR() {
+        try {
+          statusText.innerText = "Loading Image...";
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = imageUrl;
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+          });
+
+          statusText.innerText = "Compiling AR Target (this takes a moment)...";
+          const compiler = new MINDAR.IMAGE.Compiler();
+          await compiler.compileImageTargets([img], (p) => {
+            progress.style.width = (p * 100) + '%';
+          });
+
+          const exportedBuffer = await compiler.exportData();
+          const blob = new Blob([exportedBuffer]);
+          const targetUrl = URL.createObjectURL(blob);
+
+          ui.classList.add('hidden');
+          setupScene(targetUrl);
+        } catch (e) {
+          console.error(e);
+          statusText.innerText = "Error loading AR. The image might have CORS restrictions or is invalid.";
+          progress.style.background = "red";
+        }
+      }
+
+      function setupScene(targetUrl) {
+        const sceneEl = document.createElement('a-scene');
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${targetUrl}; autoStart: true; uiLoading: no; uiError: no; uiScanning: no;`);
+        sceneEl.setAttribute('color-space', 'sRGB');
+        sceneEl.setAttribute('renderer', 'colorManagement: true, physicallyCorrectLights');
+        sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
+        sceneEl.setAttribute('device-orientation-permission-ui', 'enabled: false');
+
+        const camera = document.createElement('a-camera');
+        camera.setAttribute('position', '0 0 0');
+        camera.setAttribute('look-controls', 'enabled: false');
+        sceneEl.appendChild(camera);
+
+        const target = document.createElement('a-entity');
+        target.setAttribute('mindar-image-target', 'targetIndex: 0');
+        
+        if (ytId) {
+          // A-Frame doesn't support iframes natively as textures easily without html2canvas or similar.
+          // We will use a CSS3D renderer approach or just overlay the iframe using standard DOM tracking.
+          // Since A-Frame iframe is hard, let's fallback to standard video if possible, or show a message.
+          // Actually, we can track the position of the target and move a DOM element!
+          setupDOMTracking(sceneEl, target);
+        } else {
+          const assets = document.createElement('a-assets');
+          const video = document.createElement('video');
+          video.setAttribute('id', 'ar-video');
+          video.setAttribute('src', videoUrl);
+          video.setAttribute('crossorigin', 'anonymous');
+          video.setAttribute('loop', 'true');
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
+          video.muted = true; // Muted for autoplay
+          assets.appendChild(video);
+          sceneEl.appendChild(assets);
+
+          const plane = document.createElement('a-plane');
+          plane.setAttribute('src', '#ar-video');
+          plane.setAttribute('position', '0 0 0');
+          plane.setAttribute('height', '1');
+          plane.setAttribute('width', '1'); // Will adjust based on video aspect ratio later
+          plane.setAttribute('rotation', '0 0 0');
+          target.appendChild(plane);
+
+          target.addEventListener('targetFound', () => {
+            video.play();
+          });
+          target.addEventListener('targetLost', () => {
+            video.pause();
+          });
+        }
+
+        sceneEl.appendChild(target);
+        document.body.appendChild(sceneEl);
+      }
+
+      function setupDOMTracking(sceneEl, target) {
+        // Create an iframe overlay that tracks the 3D position
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.height = '100%';
+        container.style.pointerEvents = 'none';
+        container.style.zIndex = '100';
+        
+        const iframe = document.createElement('iframe');
+        iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=0&playsinline=1&mute=1`;
+        iframe.style.width = '300px';
+        iframe.style.height = '200px';
+        iframe.style.border = 'none';
+        iframe.style.position = 'absolute';
+        iframe.style.transformOrigin = 'center';
+        iframe.style.display = 'none';
+        iframe.style.pointerEvents = 'auto';
+        container.appendChild(iframe);
+        document.body.appendChild(container);
+
+        target.addEventListener('targetFound', () => {
+          iframe.style.display = 'block';
+        });
+        target.addEventListener('targetLost', () => {
+          iframe.style.display = 'none';
+        });
+
+        // Update position every frame
+        sceneEl.addEventListener('tick', () => {
+          if (iframe.style.display === 'block') {
+            const object3D = target.object3D;
+            const camera = sceneEl.camera;
+            if (!camera) return;
+            
+            const vector = new THREE.Vector3();
+            object3D.getWorldPosition(vector);
+            vector.project(camera);
+            
+            const x = (vector.x *  .5 + .5) * window.innerWidth;
+            const y = (vector.y * -.5 + .5) * window.innerHeight;
+            
+            // Basic 2D tracking (doesn't handle 3D rotation perfectly but works for basic overlay)
+            iframe.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+          }
+        });
+      }
+
+      if (imageUrl) {
+        initAR();
+      } else {
+        statusText.innerText = "Missing parameters.";
+      }
+    </script>
+  </body>
+</html>

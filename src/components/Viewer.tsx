@@ -25,6 +25,10 @@ export default function Viewer() {
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   
+  // 3DoF Tracking State
+  const [transform, setTransform] = useState({ x: 0, y: 0, rotate: 0 });
+  const initialOrientationRef = useRef<{alpha: number, beta: number, gamma: number} | null>(null);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<HTMLVideoElement>(null);
   const progressIntervalRef = useRef<number | null>(null);
@@ -76,84 +80,17 @@ export default function Viewer() {
 
   const ytId = activeProject ? getYouTubeId(activeProject.overlayVideoUrl) : null;
 
-  // Handle Camera Stream Attachment
+  // Handle messages from AR iframe
   useEffect(() => {
-    if (arStep !== 'idle' && cameraRef.current && cameraStream) {
-      cameraRef.current.srcObject = cameraStream;
-    }
-  }, [arStep, cameraStream]);
-
-  // Transition from loading to scanning
-  useEffect(() => {
-    if (arStep === 'loading' && isVideoReady) {
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-      setLoadProgress(100);
-      const timer = setTimeout(() => {
-        setArStep('scanning');
-        startTrackingSimulation();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [arStep, isVideoReady]);
-
-  const handleCanPlayThrough = () => {
-    setIsVideoReady(true);
-  };
-
-  const startTrackingSimulation = () => {
-    setTimeout(() => {
-      setArStep('tracked');
-      if (videoRef.current) {
-        videoRef.current.currentTime = 0;
-        videoRef.current.play().catch(e => console.error("Play failed", e));
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'close-ar') {
+        setArStep('idle');
+        setActiveProject(null);
       }
-    }, 2500);
-  };
-
-  const startExperience = async () => {
-    try {
-      // Unlock audio/video playback immediately on user click
-      if (videoRef.current) {
-        videoRef.current.play().catch(e => console.warn("Autoplay unlock prevented:", e));
-        videoRef.current.pause();
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' },
-        audio: false 
-      });
-      setCameraStream(stream);
-      
-      if (isVideoReady) {
-        setLoadProgress(100);
-        setArStep('scanning');
-        startTrackingSimulation();
-      } else {
-        setArStep('loading');
-        progressIntervalRef.current = window.setInterval(() => {
-          setLoadProgress(p => p >= 90 ? p : p + Math.random() * 15);
-        }, 300);
-      }
-    } catch (err) {
-      console.error("Error accessing camera:", err);
-      alert("Camera access is required for the AR experience.");
-    }
-  };
-
-  const stopExperience = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-    }
-    setCameraStream(null);
-    setArStep('idle');
-    setActiveProject(null);
-    if (videoRef.current) {
-      videoRef.current.pause();
-    }
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-    }
-  };
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   if (loading) {
     return (
@@ -165,47 +102,12 @@ export default function Viewer() {
 
   // AR Scanner View
   if (activeProject) {
-    return (
-      <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-black z-[100] flex flex-col touch-none">
-        {/* 3D AR Overlay Container */}
-        <div className={`absolute inset-0 z-20 flex items-center justify-center pointer-events-none transition-opacity duration-1000 ${arStep === 'tracked' ? 'opacity-100' : 'opacity-0'}`}>
-          <div 
-            className="relative w-[85vw] max-w-md aspect-[4/5] bg-black/20 rounded-xl shadow-2xl overflow-hidden pointer-events-auto border border-white/10"
-            style={{
-              transform: arStep === 'tracked' 
-                ? 'perspective(1000px) rotateX(10deg) rotateY(-5deg) translateZ(50px)' 
-                : 'perspective(1000px) rotateX(30deg) rotateY(-20deg) translateZ(-200px)',
-              transition: 'transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1)',
-              boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 182, 193, 0.2)'
-            }}
-          >
-            {!ytId && (
-              <video
-                ref={videoRef}
-                src={activeProject.overlayVideoUrl}
-                loop
-                muted
-                playsInline
-                crossOrigin="anonymous"
-                onCanPlayThrough={handleCanPlayThrough}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            )}
-            
-            {ytId && arStep === 'tracked' && (
-              <iframe
-                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=0&playsinline=1&mute=1`}
-                allow="autoplay; encrypted-media"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            )}
-          </div>
-        </div>
-
-        {arStep === 'idle' && (
+    if (arStep === 'idle') {
+      return (
+        <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-black z-[100] flex flex-col touch-none">
           <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-baby-pink-light p-6">
             <button 
-              onClick={stopExperience}
+              onClick={() => setActiveProject(null)}
               className="absolute top-6 right-6 p-2 bg-white rounded-full shadow-md text-gray-900 z-40"
             >
               <X className="h-6 w-6" />
@@ -225,7 +127,7 @@ export default function Viewer() {
               </div>
 
               <button
-                onClick={startExperience}
+                onClick={() => setArStep('tracked')}
                 className="w-full flex items-center justify-center py-4 px-6 border border-transparent rounded-xl shadow-lg text-lg font-medium text-gray-900 bg-baby-pink hover:bg-baby-pink-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-baby-pink transition-all transform hover:scale-105"
               >
                 <Camera className="mr-2 h-6 w-6" />
@@ -233,75 +135,25 @@ export default function Viewer() {
               </button>
             </div>
           </div>
-        )}
+        </div>
+      );
+    }
 
-        {arStep !== 'idle' && (
-          <div className="absolute inset-0 z-10 bg-black">
-            {/* Camera Feed */}
-            <video 
-              ref={cameraRef}
-              autoPlay 
-              playsInline 
-              muted 
-              className="absolute inset-0 w-full h-full object-cover"
-            />
+    const arUrl = new URL('/ar.html', window.location.origin);
+    arUrl.searchParams.set('image', activeProject.triggerImageUrl);
+    if (ytId) {
+      arUrl.searchParams.set('ytId', ytId);
+    } else {
+      arUrl.searchParams.set('video', activeProject.overlayVideoUrl);
+    }
 
-            {/* Loading Assets Overlay */}
-            {arStep === 'loading' && (
-              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm px-8">
-                <div className="w-full max-w-xs">
-                  <div className="flex justify-between text-white mb-2 text-sm font-medium tracking-wider uppercase">
-                    <span>Loading Assets</span>
-                    <span>{Math.round(loadProgress)}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-baby-pink transition-all duration-300 ease-out"
-                      style={{ width: `${loadProgress}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Scanning UI */}
-            {arStep === 'scanning' && (
-              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center pointer-events-none">
-                <div className="w-64 h-64 border-2 border-white/50 border-dashed rounded-lg relative animate-pulse">
-                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-baby-pink"></div>
-                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-baby-pink"></div>
-                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-baby-pink"></div>
-                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-baby-pink"></div>
-                </div>
-                <p className="text-white mt-8 font-medium tracking-widest uppercase text-sm animate-bounce drop-shadow-md">
-                  Scanning...
-                </p>
-              </div>
-            )}
-
-            {/* Controls */}
-            <div className="absolute top-6 right-6 z-40 flex gap-4">
-              {arStep === 'tracked' && (
-                <button 
-                  onClick={() => {
-                    setArStep('scanning');
-                    if (videoRef.current) videoRef.current.pause();
-                    startTrackingSimulation();
-                  }}
-                  className="px-4 py-2 bg-black/50 backdrop-blur-md text-white border border-white/20 rounded-full text-sm font-medium hover:bg-black/70 transition-colors"
-                >
-                  Reset Tracking
-                </button>
-              )}
-              <button 
-                onClick={stopExperience}
-                className="p-3 bg-black/50 backdrop-blur-md border border-white/20 rounded-full text-white hover:bg-black/70 transition-colors"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-          </div>
-        )}
+    return (
+      <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-black z-[100] flex flex-col touch-none">
+        <iframe 
+          src={arUrl.toString()} 
+          className="absolute inset-0 w-full h-full border-none"
+          allow="camera; gyroscope; accelerometer; magnetometer; xr-spatial-tracking; microphone;"
+        />
       </div>
     );
   }
