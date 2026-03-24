@@ -122,8 +122,8 @@
           target.appendChild(plane);
 
           video.addEventListener('loadedmetadata', () => {
-            const ratio = video.videoWidth / video.videoHeight;
-            plane.setAttribute('width', ratio);
+            const ratio = video.videoHeight / video.videoWidth;
+            plane.setAttribute('height', ratio);
           });
 
           target.addEventListener('targetFound', () => {
@@ -153,7 +153,7 @@
         const iframe = document.createElement('iframe');
         iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=0&playsinline=1&mute=1`;
         iframe.style.width = '300px';
-        iframe.style.height = '200px';
+        iframe.style.height = '169px'; // 16:9 aspect ratio
         iframe.style.border = 'none';
         iframe.style.position = 'absolute';
         iframe.style.transformOrigin = 'center';
@@ -169,42 +169,47 @@
           iframe.style.display = 'none';
         });
 
-        // Update position every frame
-        sceneEl.addEventListener('tick', () => {
-          if (iframe.style.display === 'block') {
-            const object3D = target.object3D;
-            const camera = sceneEl.camera;
-            if (!camera) return;
-            
-            // Get center point in screen space
-            const center = new THREE.Vector3(0, 0, 0);
-            object3D.localToWorld(center);
-            center.project(camera);
-            
-            const x = (center.x *  .5 + .5) * window.innerWidth;
-            const y = (center.y * -.5 + .5) * window.innerHeight;
-            
-            // Get top point in screen space to calculate scale and rotation
-            const top = new THREE.Vector3(0, 0.5, 0);
-            object3D.localToWorld(top);
-            top.project(camera);
-            
-            const dx = (top.x - center.x) * window.innerWidth * 0.5;
-            const dy = (top.y - center.y) * window.innerHeight * 0.5;
-            
-            // pixel height of the target on screen
-            const pixelHeight = Math.sqrt(dx*dx + dy*dy) * 2;
-            
-            // Base height of iframe is 200px
-            const scale = pixelHeight / 200;
-            
-            // Calculate rotation (atan2 gives angle from positive X axis)
-            const angle = Math.atan2(dy, dx) + Math.PI/2;
-            const rotZ = angle * (180 / Math.PI);
-            
-            iframe.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${rotZ}deg) scale(${scale})`;
+        // Register a custom A-Frame component to update the iframe position on every frame
+        const compName = 'iframe-tracker-' + Date.now();
+        AFRAME.registerComponent(compName, {
+          tick: function () {
+            if (iframe.style.display === 'block') {
+              const object3D = target.object3D;
+              const camera = sceneEl.camera;
+              if (!camera) return;
+              
+              // Get center point in screen space
+              const center = new THREE.Vector3(0, 0, 0);
+              object3D.localToWorld(center);
+              center.project(camera);
+              
+              const x = (center.x *  .5 + .5) * window.innerWidth;
+              const y = (center.y * -.5 + .5) * window.innerHeight;
+              
+              // Get right point in screen space to calculate scale and rotation
+              // MindAR normalizes target width to 1, so right edge is at x = 0.5
+              const right = new THREE.Vector3(0.5, 0, 0);
+              object3D.localToWorld(right);
+              right.project(camera);
+              
+              const dx = (right.x - center.x) * window.innerWidth * 0.5;
+              const dy = (right.y - center.y) * window.innerHeight * 0.5;
+              
+              // pixel width of the target on screen
+              const pixelWidth = Math.sqrt(dx*dx + dy*dy) * 2;
+              
+              // Base width of iframe is 300px
+              const scale = pixelWidth / 300;
+              
+              // Calculate rotation (atan2 gives angle from positive X axis)
+              const angle = Math.atan2(dy, dx);
+              const rotZ = angle * (180 / Math.PI);
+              
+              iframe.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${rotZ}deg) scale(${scale})`;
+            }
           }
         });
+        sceneEl.setAttribute(compName, '');
       }
 
       if (imageUrl) {
