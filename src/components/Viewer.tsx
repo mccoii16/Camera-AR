@@ -104,7 +104,7 @@ export default function Viewer() {
   if (activeProject) {
     if (arStep === 'idle') {
       return (
-        <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-black z-[100] flex flex-col touch-none">
+        <div className="fixed inset-0 z-[100] bg-black touch-none" style={{ width: '100vw', height: '100dvh' }}>
           <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-baby-pink-light p-6">
             <button 
               onClick={() => setActiveProject(null)}
@@ -148,10 +148,10 @@ export default function Viewer() {
     }
 
     return (
-      <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-black z-[100] flex flex-col touch-none">
+      <div className="fixed inset-0 z-[100] bg-black touch-none" style={{ width: '100vw', height: '100dvh' }}>
         <iframe 
           src={arUrl.toString()} 
-          className="absolute inset-0 w-full h-full border-none"
+          className="w-full h-full border-none block"
           allow="camera; gyroscope; accelerometer; magnetometer; xr-spatial-tracking; microphone;"
         />
       </div>
